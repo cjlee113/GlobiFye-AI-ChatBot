@@ -1,4 +1,4 @@
-from video_retrieval.youtube_api import search_youtube
+from video_retrieval.youtube_API import search_youtube
 from video_retrieval.video_selector import select_top_videos
 
 def perform_search(query):
