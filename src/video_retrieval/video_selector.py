@@ -8,7 +8,7 @@ def select_videos(query):
     videos = search_youtube(query)
     selected_videos = []
     threshold = .95
-    while len(select_videos) < 10:
+    while len(selected_videos) < 10:
         relevant_videos = score_similarity(query, videos, tokenizer, model, threshold)
         if len(relevant_videos) >= 10:
             selected_videos.append(relevant_videos[:10])
