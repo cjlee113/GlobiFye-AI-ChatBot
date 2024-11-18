@@ -1,30 +1,28 @@
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+import re
 
 # Load the Sentence-BERT model
 def load_model():
     model = SentenceTransformer("all-MiniLM-L6-v2")  # A lightweight S-BERT model
     return model
 
+# Generate Sentence-BERT embedding for a given text
 def get_embedding(text, model):
-    """Generate Sentence-BERT embedding for a given text."""
     return model.encode(text, convert_to_numpy=True)
 
-def score_similarity(query, videos, model, threshold=0.6):
-    """
-    Scores and filters videos based on similarity to the query,
-    and incorporates filtering by tags and engagement metrics.
-    
-    Parameters:
-    - query: string, the search query based on resume keywords
-    - videos: list of dictionaries, each containing 'title', 'description',
-              'tags', 'category', 'views', 'likes', and 'dislikes'
-    - threshold: float, minimum similarity score to consider relevant
+# Extract keywords from the query
+def extract_keywords(query):
+    """Extract keywords from the query, removing common stop words."""
+    stop_words = {"for", "in", "and", "the", "a", "an", "on", "of", "to", "with"}
+    words = re.findall(r'\w+', query.lower())
+    keywords = [word for word in words if word not in stop_words]
+    return keywords
 
-    Returns:
-    - List of videos that meet the similarity threshold, sorted by relevance
-    """
+# Score and filter videos based on similarity and keyword emphasis
+def score_similarity(query, videos, model, keyword_weight=1.5, threshold=0.6):
     query_embedding = get_embedding(query, model)
+    keywords = extract_keywords(query)
     relevant_videos = []
 
     for video in videos:
@@ -35,11 +33,12 @@ def score_similarity(query, videos, model, threshold=0.6):
         # Calculate cosine similarity
         similarity = cosine_similarity([query_embedding], [video_embedding]).flatten()[0]
 
-        # Tag Matching
-        tag_score = 0
+        # Keyword Matching
+        keyword_matches = sum(1 for keyword in keywords if keyword in video_text.lower())
         if 'tags' in video:
-            matching_tags = [tag for tag in video['tags'] if tag.lower() in query.lower()]
-            tag_score = len(matching_tags) / (len(video['tags']) + 1e-5)  # Normalized score
+            keyword_matches += sum(1 for keyword in keywords if keyword in [tag.lower() for tag in video['tags']])
+        
+        keyword_score = keyword_weight * keyword_matches  # Boost score based on keyword matches
 
         # Category Filtering
         is_relevant_category = video.get('category', '').lower() in ['education', 'science & technology']
@@ -57,15 +56,10 @@ def score_similarity(query, videos, model, threshold=0.6):
 
         # Combine Scores
         relevance_score = (
-            0.4 * similarity +
-            0.2 * tag_score +
-            0.1 * category_score +
-            0.3 * popularity_score
+            0.5 * similarity +  # Weight for semantic similarity
+            0.3 * keyword_score +  # Weight for keyword emphasis
+            0.2 * popularity_score  # Weight for engagement metrics
         )
-
-        # Penalize high popularity if not relevant
-        if popularity_score > 0.8 and similarity < 0.5:
-            relevance_score *= 0.7  # Reduce score if popular but not very relevant
 
         # Boost less popular but useful videos
         if views < 10000 and similarity > 0.6:
@@ -78,3 +72,6 @@ def score_similarity(query, videos, model, threshold=0.6):
     # Sort videos by relevance score, highest first
     relevant_videos.sort(key=lambda x: x['similarity_score'], reverse=True)
     return relevant_videos
+
+# Example usage:
+model = load_model()
