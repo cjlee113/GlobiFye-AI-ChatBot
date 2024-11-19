@@ -19,8 +19,8 @@ def extract_keywords(query):
     keywords = [word for word in words if word not in stop_words]
     return keywords
 
-# Score and filter videos based on similarity and keyword emphasis
-def score_similarity(query, videos, model, keyword_weight=1.5, threshold=0.6):
+# Score and filter videos based on similarity, keyword emphasis, and channel tags
+def score_similarity(query, videos, model, keyword_weight=1.5, channel_tag_weight=0.3, threshold=0.6):
     query_embedding = get_embedding(query, model)
     keywords = extract_keywords(query)
     relevant_videos = []
@@ -40,6 +40,12 @@ def score_similarity(query, videos, model, keyword_weight=1.5, threshold=0.6):
         
         keyword_score = keyword_weight * keyword_matches  # Boost score based on keyword matches
 
+        # **New** Channel Tag Filtering
+        channel_tags = video.get('channel_tags', [])
+        channel_tag_score = 0.5  # Default score for non-relevant channels
+        if any(tag.lower() in ['education', 'elearning', 'technology'] for tag in channel_tags):
+            channel_tag_score = 1.0  # Boost score if channel is relevant
+
         # Category Filtering
         is_relevant_category = video.get('category', '').lower() in ['education', 'science & technology']
         category_score = 1.0 if is_relevant_category else 0.5  # Penalize unrelated categories
@@ -56,9 +62,10 @@ def score_similarity(query, videos, model, keyword_weight=1.5, threshold=0.6):
 
         # Combine Scores
         relevance_score = (
-            0.5 * similarity +  # Weight for semantic similarity
+            0.4 * similarity +  # Adjusted weight for semantic similarity
             0.3 * keyword_score +  # Weight for keyword emphasis
-            0.2 * popularity_score  # Weight for engagement metrics
+            0.2 * popularity_score +  # Weight for engagement metrics
+            channel_tag_weight * channel_tag_score  # Weight for channel tags
         )
 
         # Boost less popular but useful videos
