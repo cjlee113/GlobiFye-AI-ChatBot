@@ -1,20 +1,12 @@
 from transformers import DistilBertTokenizer, DistilBertModel
-import torch
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 import re
+import requests
 
 # Load the tokenizer and model
 def load_model():
     tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
     model = DistilBertModel.from_pretrained("distilbert-base-uncased")
     return tokenizer, model
-
-# Generate DistilBERT embedding for a given text
-def get_embedding(text, tokenizer, model):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
-    outputs = model(**inputs)
-    return outputs.last_hidden_state[:, 0, :].detach().numpy()
 
 # Extract keywords from the query
 def extract_keywords(query):
@@ -24,62 +16,82 @@ def extract_keywords(query):
     keywords = [word for word in words if word not in stop_words]
     return keywords
 
-# Score and filter videos based on similarity, keyword emphasis, and channel tags
-def score_similarity(query, videos, tokenizer, model, keyword_weight=1.5, channel_tag_weight=0.3, threshold=0.6):
-    query_embedding = get_embedding(query, tokenizer, model)
-    keywords = extract_keywords(query)
-    relevant_videos = []
+# Fetch videos from YouTube using the API
+def fetch_youtube_videos(api_key, query, max_results=10):
+    """
+    Fetch videos using YouTube's search.list API.
+    Filters for medium-length videos sorted by view count.
+    """
+    base_url = "https://www.googleapis.com/youtube/v3/search"
+    keywords = "+".join(query)  # Convert keywords list into a query string
+    params = {
+        "part": "snippet",
+        "q": keywords,
+        "type": "video",
+        "videoDuration": "medium",  # Medium-length videos (4-20 minutes)
+        "order": "viewCount",  # Sort by popularity
+        "maxResults": max_results,  # Limit results to 10
+        "key": api_key,
+    }
+    response = requests.get(base_url, params=params)
+    if response.status_code == 200:
+        return response.json().get("items", [])
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+        return []
 
+# Process video results
+def process_videos(videos, keywords):
+    """
+    Process video results to filter or score them further if needed.
+    Currently, this function just enriches videos with keyword match counts.
+    """
+    processed_videos = []
     for video in videos:
-        # Combine title and description for text analysis
-        video_text = f"{video['title']} {video['description']}"
-        video_embedding = get_embedding(video_text, tokenizer, model)
+        # Combine title and description for keyword matching
+        title = video['snippet']['title']
+        description = video['snippet']['description']
+        video_text = f"{title} {description}".lower()
 
-        # Calculate cosine similarity
-        similarity = cosine_similarity(query_embedding, video_embedding).flatten()[0]
+        # Count keyword matches
+        keyword_matches = sum(1 for keyword in keywords if keyword in video_text)
 
-        # Keyword Matching
-        keyword_matches = sum(1 for keyword in keywords if keyword in video_text.lower())
-        if 'tags' in video:
-            keyword_matches += sum(1 for keyword in keywords if keyword in [tag.lower() for tag in video['tags']])
-        
-        keyword_score = keyword_weight * keyword_matches  # Boost score based on keyword matches
+        processed_videos.append({
+            "title": title,
+            "description": description,
+            "channel_title": video['snippet']['channelTitle'],
+            "video_id": video['id']['videoId'],
+            "keyword_matches": keyword_matches,
+        })
 
-        # Engagement Metrics
-        views = video.get('views', 0)
-        likes = video.get('likes', 0)
-        dislikes = video.get('dislikes', 0)
-        like_ratio = likes / (likes + dislikes + 1e-5)  # Handle division by zero
+    # Optionally, sort by keyword matches or other criteria
+    processed_videos.sort(key=lambda x: x['keyword_matches'], reverse=True)
+    return processed_videos
 
-        # Popularity Score
-        popularity_score = (views / 1e6) + like_ratio  # Weighted score
-        popularity_score = min(popularity_score, 1.0)  # Cap the score at 1.0
+# Main function to integrate all steps
+def search_and_filter_videos(api_key, user_query, max_results=10):
+    # Load the NLP model (for future use, if needed)
+    tokenizer, model = load_model()
 
-        # **New** Channel Tag Filtering
-        channel_tags = video.get('channel_tags', [])
-        channel_tag_score = 0.5  # Default score for non-relevant channels
-        if any(tag.lower() in ['education', 'elearning', 'technology'] for tag in channel_tags):
-            channel_tag_score = 1.0  # Boost score if channel is relevant
-        
-        # Combine Scores
-        relevance_score = (
-            0.4 * similarity +  # Adjusted weight for semantic similarity
-            0.3 * keyword_score +  # Weight for keyword emphasis
-            0.2 * popularity_score +  # Weight for engagement metrics
-            channel_tag_weight * channel_tag_score  # Weight for channel tags
-        )
+    # Step 1: Extract keywords from user query
+    keywords = extract_keywords(user_query)
 
-        # Boost less popular but useful videos
-        if views < 10000 and similarity > 0.6:
-            relevance_score += 0.1  # Boost score for less popular but relevant videos
+    # Step 2: Use YouTube API to fetch videos
+    videos = fetch_youtube_videos(api_key, keywords, max_results)
 
-        # Add video to results if relevance score meets the threshold
-        if relevance_score >= threshold:
-            relevant_videos.append({**video, 'similarity_score': relevance_score})
+    # Step 3: Process and optionally filter videos
+    filtered_videos = process_videos(videos, keywords)
 
-    # Sort videos by relevance score, highest first
-    relevant_videos.sort(key=lambda x: x['similarity_score'], reverse=True)
-    return relevant_videos
+    # Return the top results
+    return filtered_videos
 
-# Example usage:
-tokenizer, model = load_model()
+# Example usage
+if __name__ == "__main__":
+    API_KEY = "YOUR_YOUTUBE_API_KEY"
+    query = "learn python programming for beginners"
+    results = search_and_filter_videos(API_KEY, query)
+    for idx, video in enumerate(results):
+        print(f"{idx + 1}. {video['title']} (Keyword Matches: {video['keyword_matches']})")
+        print(f"   Description: {video['description']}")
+        print(f"   Channel: {video['channel_title']}")
+        print(f"   Watch: https://www.youtube.com/watch?v={video['video_id']}\n")
