@@ -3,7 +3,7 @@ import os
 
 def search_youtube(query, max_results=5):
     """Searches YouTube for videos based on the given query."""
-    api_key = os.getenv("AIzaSyAV9j3x5eSpKSNqELGYg5fZ5xzKNV-auYs")
+    api_key = os.getenv("AIzaSyBtfyXa2j64VaBKWao87Mjnvqi67N0VltA")
     youtube = googleapiclient.discovery.build("youtube", "v3", developerKey=api_key)
 
     request = youtube.search().list(
