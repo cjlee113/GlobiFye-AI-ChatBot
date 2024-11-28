@@ -1,4 +1,6 @@
 from transformers import DistilBertTokenizer, DistilBertModel
+import sys
+from video_retrieval.youtube_API import api_key
 import re
 import requests
 
@@ -17,7 +19,7 @@ def extract_keywords(query):
     return keywords
 
 # Fetch videos from YouTube using the API
-def fetch_youtube_videos(api_key, query, max_results=10):
+def fetch_youtube_videos(query, max_results=10):
     """
     Fetch videos using YouTube's search.list API.
     Filters for medium-length videos sorted by view count.
@@ -31,7 +33,7 @@ def fetch_youtube_videos(api_key, query, max_results=10):
         "videoDuration": "medium",  # Medium-length videos (4-20 minutes)
         "order": "viewCount",  # Sort by popularity
         "maxResults": max_results,  # Limit results to 10
-        "key": api_key,
+        "key": api_key,  # Use the centralized API key
     }
     response = requests.get(base_url, params=params)
     if response.status_code == 200:
@@ -69,7 +71,7 @@ def process_videos(videos, keywords):
     return processed_videos
 
 # Main function to integrate all steps
-def search_and_filter_videos(api_key, user_query, max_results=10):
+def search_and_filter_videos(user_query, max_results=10):
     # Load the NLP model (for future use, if needed)
     tokenizer, model = load_model()
 
@@ -77,7 +79,7 @@ def search_and_filter_videos(api_key, user_query, max_results=10):
     keywords = extract_keywords(user_query)
 
     # Step 2: Use YouTube API to fetch videos
-    videos = fetch_youtube_videos(api_key, keywords, max_results)
+    videos = fetch_youtube_videos(keywords, max_results)
 
     # Step 3: Process and optionally filter videos
     filtered_videos = process_videos(videos, keywords)
@@ -87,11 +89,11 @@ def search_and_filter_videos(api_key, user_query, max_results=10):
 
 # Example usage
 if __name__ == "__main__":
-    API_KEY = "YOUR_YOUTUBE_API_KEY"
-    query = "learn python programming for beginners"
-    results = search_and_filter_videos(API_KEY, query)
+    query = "construction management"
+    results = search_and_filter_videos(query)
     for idx, video in enumerate(results):
         print(f"{idx + 1}. {video['title']} (Keyword Matches: {video['keyword_matches']})")
         print(f"   Description: {video['description']}")
         print(f"   Channel: {video['channel_title']}")
         print(f"   Watch: https://www.youtube.com/watch?v={video['video_id']}\n")
+
