@@ -87,8 +87,8 @@ def search_and_filter_videos(api_key, user_query, max_results=10):
 
 # Example usage
 if __name__ == "__main__":
-    API_KEY = "YOUR_YOUTUBE_API_KEY"
-    query = "learn python programming for beginners"
+    API_KEY = "AIzaSyAV9j3x5eSpKSNqELGYg5fZ5xzKNV-auYs"
+    query = "project management"
     results = search_and_filter_videos(API_KEY, query)
     for idx, video in enumerate(results):
         print(f"{idx + 1}. {video['title']} (Keyword Matches: {video['keyword_matches']})")
