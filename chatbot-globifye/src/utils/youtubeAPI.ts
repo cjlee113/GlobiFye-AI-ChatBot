@@ -4,7 +4,7 @@ export const fetchYouTubeVideos = async (query: string) => {
       throw new Error("Query parameter is required");
     }
 
-    const apiKey = "AIzaSyDbovgPVGF2aCenY8LTJGvn35dIWZUHw50"; // Ensure the API key is set
+    const apiKey = "NEW_API_KEY"; // Ensure the API key is set
     const response = await fetch(
       `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&key=${apiKey}`
     );
